@@ -84,7 +84,15 @@ java -cp .:flatlaf-<version>.jar Main
 - The animation runs automatically on launch.
 - The application opens in fullscreen mode.
 - The animation stops when the final person either finishes crossing or gets hit and leaves the screen.
+---
+## 📄 License
+
+This project is licensed under the **MIT License**.  
+For more details, see the [LICENSE](LICENSE) file.
 
 ---
 
-## Enjoy the show! 🎬
+## 🎬 Enjoy the Show!
+
+Thanks for checking out the project  🚀
+
