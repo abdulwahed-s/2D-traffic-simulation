@@ -7,6 +7,8 @@ public class Main extends JFrame {
 
     private static final int FRAME_WIDTH = 1920;//
     private static final int FRAME_HEIGHT = 1080;
+    private AnimationPanel panel;
+    private JPanel controlPanel;
 
     public Main() {
         setExtendedState(JFrame.MAXIMIZED_BOTH);//maximise the frame state to make it fullscreen
@@ -21,6 +23,10 @@ public class Main extends JFrame {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);//sit the closing button to close the app on clicked
         AnimationPanel panel = new AnimationPanel();// Create a custom panel
         add(panel, BorderLayout.CENTER);// Add the panel to the center of the frame using BorderLayout
+
+        controlPanel = panel.createControlPanel();
+        add(controlPanel, BorderLayout.SOUTH);
+
         pack();// Sizes the frame so that all its contents are at or above their preferred sizes
         setVisible(true);//set frame to be visible
     }
@@ -30,6 +36,7 @@ public class Main extends JFrame {
         JMenuBar menuBar = new JMenuBar();// Create an instance of JMenuBar
         JMenu fileMenu = new JMenu("File");//create new JMenu named fileMenu
         JMenu helpMenu = new JMenu("Help");//create new JMenu named helpMenu
+        JMenu viewMenu = new JMenu("View");//create new JMenu named viewMenu
 
         JMenuItem exitItem = new JMenuItem("Exit");//create new JmenuItem named exitItem
         exitItem.addActionListener(e -> System.exit(0));//set function on clicked on the exitItem to close the frame
@@ -39,12 +46,21 @@ public class Main extends JFrame {
         minimizeButton.addActionListener(e  -> setState(Frame.ICONIFIED));//set function on clicked on the minimizeButton to minimize the frame
         fileMenu.add(minimizeButton);//add minimizeButton to fileMenu
 
+        JCheckBoxMenuItem showControlsItem = new JCheckBoxMenuItem("Show Controls", true);//create new JCheckBoxMenuItem named showControlsItem
+        showControlsItem.addActionListener(e -> {
+            controlPanel.setVisible(showControlsItem.isSelected());
+            revalidate();
+            repaint();
+        });//set function on clicked on the hide the Controls Item in the frame
+        viewMenu.add(showControlsItem);
+
         JMenuItem aboutItem = new JMenuItem("About");//create new JmenuItem named aboutItem
         aboutItem.addActionListener(e -> JOptionPane.showMessageDialog(this, "Computer Graphics Course Project\nBy Abdulwahed Rifaat"));//set function on clicked on the aboutItem to show message as alert
         helpMenu.add(aboutItem);//add aboutItem to helpMenu
 
         menuBar.add(fileMenu);//add File section to the menu bar
         menuBar.add(helpMenu);//add Help section to the menu bar
+        menuBar.add(viewMenu);//add viewMenu section to the menu bar
         return menuBar;
     }
 
@@ -77,7 +93,9 @@ class AnimationPanel extends JPanel implements Runnable {
     private int person4HitX = 1520;
     private double person4Angle = 0;
     private boolean person4Hit = false;
-
+    private float speedMultiplier = 1.0f;
+    private boolean isPaused = false;
+    private final Object pauseLock = new Object();
     private Thread animationThread;// Thread to handle the animation logic
 
     public AnimationPanel() {
@@ -87,13 +105,90 @@ class AnimationPanel extends JPanel implements Runnable {
         animationThread.start();//start the animation thread
     }
 
+    // Control methods
+    public void increaseSpeed() {
+        speedMultiplier = Math.min(5.0f, speedMultiplier + 0.5f);
+    }
+
+    public void decreaseSpeed() {
+        speedMultiplier = Math.max(0.2f, speedMultiplier - 0.5f);
+    }
+
+    public void togglePause() {
+        isPaused = !isPaused;
+        if (!isPaused) {
+            synchronized(pauseLock) {
+                pauseLock.notifyAll();
+            }
+        }
+    }
+
+    // Adjusted sleep method for speed control
+    private void sleepAdjusted(int milliseconds) throws InterruptedException {
+        if (isPaused) {
+            synchronized(pauseLock) {
+                while (isPaused) {
+                    pauseLock.wait();
+                }
+            }
+        }
+        Thread.sleep((long)(milliseconds / speedMultiplier));
+    }
+
+    //Pause check method
+    private void checkPaused() throws InterruptedException {
+        if (isPaused) {
+            synchronized(pauseLock) {
+                while (isPaused) {
+                    pauseLock.wait();
+                }
+            }
+        }
+    }
+
+    // Control panel creation
+    public JPanel createControlPanel() {
+        JPanel controlPanel = new JPanel();
+        controlPanel.setBackground(new Color(60, 63, 65));
+
+        JButton fasterBtn = new JButton(">> Faster");
+        fasterBtn.addActionListener(e -> increaseSpeed());
+
+        JButton slowerBtn = new JButton("<< Slower");
+        slowerBtn.addActionListener(e -> decreaseSpeed());
+
+        JButton pauseBtn = new JButton("⏸ Pause");
+        pauseBtn.addActionListener(e -> togglePause());
+
+        // Style buttons to match FlatDarkLaf theme
+        for (JButton btn : new JButton[]{fasterBtn, slowerBtn, pauseBtn}) {
+            btn.setBackground(new Color(69, 73, 74));
+            btn.setForeground(Color.WHITE);
+            btn.setFocusPainted(false);
+            btn.setBorder(BorderFactory.createEmptyBorder(5, 15, 5, 15));
+        }
+
+        controlPanel.add(slowerBtn);
+        controlPanel.add(pauseBtn);
+        controlPanel.add(fasterBtn);
+
+        return controlPanel;
+    }
+
     public void run() {
         try {
             // Person 1 crosses
             while (person1Y < 880) {
+                //  for pause functionality
+                if (isPaused) {
+                    synchronized(pauseLock) {
+                        while (isPaused) pauseLock.wait();
+                    }
+                }
                 person1Y += 2;
                 repaint();
-                Thread.sleep(30);
+                // for speed control
+                Thread.sleep((int)(30 / speedMultiplier));
             }
             person1Moving = false;
             Thread.sleep(1000);
@@ -101,9 +196,16 @@ class AnimationPanel extends JPanel implements Runnable {
             // Person 2 crosses
             person2Moving = true;
             while (person2Y < 880) {
+                //  pause functionality
+                if (isPaused) {
+                    synchronized(pauseLock) {
+                        while (isPaused) pauseLock.wait();
+                    }
+                }
                 person2Y += 2;
                 repaint();
-                Thread.sleep(30);
+                // Modified for speed control
+                Thread.sleep((int)(30 / speedMultiplier));
             }
             person2Moving = false;
             Thread.sleep(1000);
@@ -121,9 +223,16 @@ class AnimationPanel extends JPanel implements Runnable {
             // Car moves
             carMoving = true;
             while (carX < 2000) {
+                //  pause functionality
+                if (isPaused) {
+                    synchronized(pauseLock) {
+                        while (isPaused) pauseLock.wait();
+                    }
+                }
                 carX += 5;
                 repaint();
-                Thread.sleep(30);
+                // Modified for speed control
+                Thread.sleep((int)(30 / speedMultiplier));
             }
             carMoving = false;
             Thread.sleep(500);
@@ -136,9 +245,16 @@ class AnimationPanel extends JPanel implements Runnable {
             // Person 3 crosses
             person3Moving = true;
             while (person3Y < 880) {
+                // pause functionality
+                if (isPaused) {
+                    synchronized(pauseLock) {
+                        while (isPaused) pauseLock.wait();
+                    }
+                }
                 person3Y += 2;
                 repaint();
-                Thread.sleep(30);
+                // Modified for speed control
+                Thread.sleep((int)(30 / speedMultiplier));
             }
             person3Moving = false;
             Thread.sleep(1000);
@@ -147,6 +263,12 @@ class AnimationPanel extends JPanel implements Runnable {
             person4Moving = true;
 
             while (person4Y < 880) {
+                //  pause functionality
+                if (isPaused) {
+                    synchronized(pauseLock) {
+                        while (isPaused) pauseLock.wait();
+                    }
+                }
                 person4Y += 2;
 
                 // Start car2 when person4 reaches middle of road
@@ -179,7 +301,8 @@ class AnimationPanel extends JPanel implements Runnable {
                 }
 
                 repaint();
-                Thread.sleep(30);
+                // Modified for speed control
+                Thread.sleep((int)(30 / speedMultiplier));
 
                 // Stop if car2 exits scene
                 if (car2X > 2500) {
@@ -259,7 +382,7 @@ class AnimationPanel extends JPanel implements Runnable {
         if (!person4Hit) {
             drawPerson(g2, 1520, person4Y, 4);
         } else {
-        // Draw person4 flying
+            // Draw person4 flying
             AffineTransform oldTransform = g2.getTransform(); // Save the current graphics transformation
             g2.rotate(person4Angle, person4HitX, person4HitY); // Rotate the canvas around the person's position
             drawPerson(g2, person4HitX, person4HitY, 4); // Draw the rotated person
@@ -402,4 +525,4 @@ class AnimationPanel extends JPanel implements Runnable {
             xs += 150;
         }
     }
-    }
+}
